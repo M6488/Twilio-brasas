@@ -38,10 +38,9 @@ def nlu_intencao(texto: str) -> dict:
             return {"acao":"adicionar","itens":[{"nome": nome_item, "quantidade": qtd}]}
         return {"acao":"desconhecido","itens":[]}
 
-    # Uso do GROQ API
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
 
-    # Prompt com JSON de exemplo sem usar f-string dentro do JSON
+  
     prompt = f"""Você é um NLU de pedidos de restaurante. Extraia a intenção e itens do texto a seguir e responda SOMENTE JSON válido.
 
 TEXTO: {texto}

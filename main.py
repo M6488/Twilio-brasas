@@ -33,7 +33,6 @@ async def twilio_webhook(request: Request):
     body = (form.get("Body") or "").strip()
     profile_name = form.get("ProfileName") or None
 
-    # remove prefix 'whatsapp:' para salvar no DB
     telefone = from_number.replace("whatsapp:", "") if from_number else ""
     cliente = db.get_or_create_cliente_por_telefone(telefone, nome=profile_name)
     carrinho = db.get_or_create_carrinho_aberto(cliente["id"])

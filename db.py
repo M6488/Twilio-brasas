@@ -6,7 +6,7 @@ from config import DATABASE_URL
 def get_connection():
     return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
 
-# Helpers
+
 def fetch_one(query: str, params: Tuple=None):
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -25,7 +25,6 @@ def execute(query: str, params: Tuple=None):
             cur.execute(query, params)
             conn.commit()
 
-# Clientes
 def get_or_create_cliente_por_telefone(telefone: str, nome: Optional[str]=None, email: Optional[str]=None):
     cli = fetch_one("SELECT * FROM clientes WHERE telefone = %s", (telefone,))
     if cli:
@@ -35,7 +34,7 @@ def get_or_create_cliente_por_telefone(telefone: str, nome: Optional[str]=None, 
         (telefone, nome, email)
     )
 
-# Cardápio
+
 def listar_cardapio_ativo():
     return fetch_all("SELECT id, nome, preco_centavos, descricao FROM cardapio WHERE ativo = TRUE ORDER BY nome")
 
@@ -43,7 +42,7 @@ def buscar_produto_por_nome(nome: str):
     return fetch_one("SELECT id, nome, preco_centavos FROM cardapio WHERE ativo = TRUE AND LOWER(nome) LIKE %s LIMIT 1",
                      (f"%{nome.lower()}%",))
 
-# Carrinho
+
 def get_or_create_carrinho_aberto(cliente_id: int):
     carr = fetch_one("SELECT * FROM carrinhos WHERE usuario_id=%s AND status='aberto' ORDER BY criado_em DESC LIMIT 1", (cliente_id,))
     if carr:
@@ -78,7 +77,7 @@ def total_carrinho_centavos(carrinho_id) -> int:
                          WHERE ic.carrinho_id=%s""", (carrinho_id,))
     return int(res["total"] or 0)
 
-# Pedidos / Pagamentos
+
 def finalizar_carrinho_e_criar_pedido(cliente_id, carrinho_id):
     carr = fetch_one("UPDATE carrinhos SET status='fechado', finalizado_em=now() WHERE id=%s RETURNING *", (carrinho_id,))
     ped = fetch_one("INSERT INTO pedidos (cliente_id, carrinho_id, status) VALUES (%s,%s,'aguardando_pagamento') RETURNING *",
@@ -90,7 +89,7 @@ def criar_pagamento_ficticio(carrinho_id, tipo: str):
         "INSERT INTO pagamentos (carrinho_id, tipo_pagamento, status, dados_brutos) VALUES (%s,%s,'pendente','{\"mock\":true}') RETURNING *",
         (carrinho_id, tipo)
     )
-    # Aprova automaticamente
+
     pg = fetch_one("UPDATE pagamentos SET status='concluido' WHERE id=%s RETURNING *", (pg["id"],))
     ped = fetch_one("UPDATE pedidos SET status='concluido', atualizado_em=now() WHERE carrinho_id=%s RETURNING *", (carrinho_id,))
     return pg, ped
