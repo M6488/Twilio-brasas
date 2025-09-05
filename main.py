@@ -29,7 +29,7 @@ def http_carrinho(telefone: str):
 async def twilio_webhook(request: Request):
     form = await request.form()
     
-    from_number = form.get("From")        # e.g. 'whatsapp:+55DDDNnnnnn'
+    from_number = form.get("From")      
     body = (form.get("Body") or "").strip()
     profile_name = form.get("ProfileName") or None
     telefone = from_number.replace("whatsapp:", "") if from_number else ""
