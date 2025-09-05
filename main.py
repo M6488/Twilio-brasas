@@ -32,6 +32,8 @@ async def twilio_webhook(request: Request):
     from_number = form.get("From")      
     body = (form.get("Body") or "").strip()
     profile_name = form.get("ProfileName") or None
+
+    # remove prefix 'whatsapp:' para salvar no DB
     telefone = from_number.replace("whatsapp:", "") if from_number else ""
     cliente = db.get_or_create_cliente_por_telefone(telefone, nome=profile_name)
     carrinho = db.get_or_create_carrinho_aberto(cliente["id"])
@@ -69,17 +71,18 @@ async def twilio_webhook(request: Request):
             resposta = "Num encontrei esses itens no carrinho, meu rei."
     elif intent["acao"] == "finalizar":
         pedido = db.finalizar_carrinho_e_criar_pedido(cliente["id"], carrinho["id"])
-
         pagamento, pedido_atual = db.criar_pagamento_ficticio(carrinho["id"], "pix")
         total = db.total_carrinho_centavos(carrinho["id"]) / 100
         resposta = f"Pedido {pedido_atual['id']} finalizado! Total R$ {total:.2f}. Pagamento aprovado ✅. Já já sai quentinho!"
     else:
-        
         resposta = "Posso te mostrar o cardápio, adicionar itens ao carrinho, remover, listar ou finalizar. Como te ajudo?"
 
     resposta = nordestinizar(resposta)
+
+    # Garante prefixo 'whatsapp:' para o Twilio
     if from_number:
-        send_whatsapp(from_number, resposta)
+        to_whatsapp = f"whatsapp:{telefone}"
+        send_whatsapp(to_whatsapp, resposta)
 
     return "OK"
 
