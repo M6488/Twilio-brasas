@@ -5,4 +5,4 @@ sqlalchemy
 python-dotenv
 requests
 twilio
-python-multiparta
+python-multipart
