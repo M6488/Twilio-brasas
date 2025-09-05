@@ -79,12 +79,12 @@ async def twilio_webhook(request: Request):
 
     resposta = nordestinizar(resposta)
 
-    # Garante prefixo 'whatsapp:' para o Twilio
+   
     if from_number:
         to_whatsapp = f"whatsapp:{telefone}"
         send_whatsapp(to_whatsapp, resposta)
 
-    return "OK"
+    return
 
 
 def saudacao(nome: str):
