@@ -1,16 +1,13 @@
 from twilio.rest import Client
-from config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER
+from config import TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_FROM
 
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
-def enviar_mensagem(destino: str, mensagem: str):
-    """Envia mensagem WhatsApp ou SMS usando Twilio"""
-    try:
-        message = client.messages.create(
-            from_=TWILIO_PHONE_NUMBER,
-            to=destino,
-            body=mensagem
-        )
-        return {"status": "sucesso", "sid": message.sid}
-    except Exception as e:
-        return {"status": "erro", "detalhe": str(e)}
+def send_whatsapp(to_whatsapp: str, body: str):
+    """to_whatsapp no formato 'whatsapp:+55DDDNUMERO'"""
+    message = client.messages.create(
+        from_=TWILIO_WHATSAPP_FROM,
+        to=to_whatsapp,
+        body=body
+    )
+    return message.sid

@@ -1,75 +1,107 @@
-from fastapi import FastAPI, HTTPException
-from db import fetch_one, fetch_all, execute
-from twilio_client import enviar_mensagem
-from groq_client import gerar_resposta
+from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse
+from typing import Optional, Dict, Any
+from config import TWILIO_WHATSAPP_FROM
+from twilio_client import send_whatsapp
+import db
 from nordeste import nordestinizar
-import uuid
+from groq_client import nlu_intencao
 
-app = FastAPI(title="Brasas - Sistema de Pedidos")
+app = FastAPI(title="Chatbot Restaurante")
 
-# ------------------------------
-# CLIENTES
-# ------------------------------
-@app.post("/clientes")
-def criar_cliente(nome: str, telefone: str, email: str):
-    query = "INSERT INTO clientes (nome, telefone, email) VALUES (%s, %s, %s) RETURNING id"
-    cliente = fetch_one(query, (nome, telefone, email))
-    return {"id": cliente["id"], "mensagem": "Cliente cadastrado com sucesso"}
+@app.get("/health")
+def health():
+    return {"ok": True}
 
-# ------------------------------
-# CARDÁPIO
-# ------------------------------
 @app.get("/cardapio")
-def listar_cardapio():
-    return fetch_all("SELECT * FROM cardapio WHERE ativo = TRUE")
+def http_cardapio():
+    return db.listar_cardapio_ativo()
 
-# ------------------------------
-# CARRINHO
-# ------------------------------
-@app.post("/carrinho/{cliente_id}")
-def criar_carrinho(cliente_id: int):
-    query = "INSERT INTO carrinhos (usuario_id, status) VALUES (%s, 'aberto') RETURNING id"
-    carrinho = fetch_one(query, (cliente_id,))
-    return {"carrinho_id": carrinho["id"]}
+@app.get("/carrinho/{telefone}")
+def http_carrinho(telefone: str):
+    cli = db.get_or_create_cliente_por_telefone(telefone)
+    carr = db.get_or_create_carrinho_aberto(cli["id"])
+    itens = db.listar_itens_carrinho(carr["id"])
+    total = db.total_carrinho_centavos(carr["id"]) / 100
+    return {"carrinho_id": carr["id"], "itens": itens, "total": total}
 
-@app.post("/carrinho/{carrinho_id}/adicionar")
-def adicionar_item(carrinho_id: str, produto_id: int, quantidade: int):
-    execute(
-        "INSERT INTO itens_carrinho (carrinho_id, produto_id, quantidade) VALUES (%s, %s, %s) ON CONFLICT (carrinho_id, produto_id) DO UPDATE SET quantidade = itens_carrinho.quantidade + EXCLUDED.quantidade",
-        (carrinho_id, produto_id, quantidade),
-    )
-    return {"mensagem": "Produto adicionado ao carrinho"}
+@app.post("/twilio/webhook", response_class=PlainTextResponse)
+async def twilio_webhook(request: Request):
+    form = await request.form()
+    
+    from_number = form.get("From")        # e.g. 'whatsapp:+55DDDNnnnnn'
+    body = (form.get("Body") or "").strip()
+    profile_name = form.get("ProfileName") or None
+    telefone = from_number.replace("whatsapp:", "") if from_number else ""
+    cliente = db.get_or_create_cliente_por_telefone(telefone, nome=profile_name)
+    carrinho = db.get_or_create_carrinho_aberto(cliente["id"])
 
-@app.post("/carrinho/{carrinho_id}/remover")
-def remover_item(carrinho_id: str, produto_id: int):
-    execute("DELETE FROM itens_carrinho WHERE carrinho_id=%s AND produto_id=%s", (carrinho_id, produto_id))
-    return {"mensagem": "Produto removido do carrinho"}
+    intent = nlu_intencao(body)
 
-@app.post("/carrinho/{carrinho_id}/finalizar")
-def finalizar_carrinho(carrinho_id: str, tipo_pagamento: str = "pix"):
-    # Fecha carrinho
-    execute("UPDATE carrinhos SET status='fechado', finalizado_em=now() WHERE id=%s", (carrinho_id,))
+    if intent["acao"] == "saudacao":
+        resposta = saudacao(cliente.get("nome") or "cliente")
+    elif intent["acao"] == "cardapio":
+        resposta = montar_cardapio_texto()
+    elif intent["acao"] == "listar_carrinho":
+        resposta = montar_carrinho_texto(carrinho["id"])
+    elif intent["acao"] == "adicionar":
+        adicionados = []
+        for item in intent.get("itens", []):
+            prod = db.buscar_produto_por_nome(item.get("nome",""))
+            if prod:
+                qtd = max(1, int(item.get("quantidade") or 1))
+                db.add_item(carrinho["id"], prod["id"], qtd)
+                adicionados.append(f"{qtd}x {prod['nome']}")
+        if adicionados:
+            resposta = f"Botei no carrinho: {', '.join(adicionados)}. Quer ver o carrinho ou finalizar?"
+        else:
+            resposta = "Num achei esses itens no cardápio não, visse? Diz de novo o nome certinho."
+    elif intent["acao"] == "remover":
+        removidos = []
+        for item in intent.get("itens", []):
+            prod = db.buscar_produto_por_nome(item.get("nome",""))
+            if prod:
+                db.remove_item(carrinho["id"], prod["id"])
+                removidos.append(prod["nome"])
+        if removidos:
+            resposta = f"Tirei do carrinho: {', '.join(removidos)}. Quer mais alguma coisa?"
+        else:
+            resposta = "Num encontrei esses itens no carrinho, meu rei."
+    elif intent["acao"] == "finalizar":
+        pedido = db.finalizar_carrinho_e_criar_pedido(cliente["id"], carrinho["id"])
 
-    # Cria pagamento fictício
-    pagamento_id = str(uuid.uuid4())
-    execute(
-        "INSERT INTO pagamentos (id, carrinho_id, tipo_pagamento, status, dados_brutos) VALUES (%s, %s, %s, %s, %s)",
-        (pagamento_id, carrinho_id, tipo_pagamento, "concluido", '{"simulacao":"pagamento aprovado"}'),
-    )
+        pagamento, pedido_atual = db.criar_pagamento_ficticio(carrinho["id"], "pix")
+        total = db.total_carrinho_centavos(carrinho["id"]) / 100
+        resposta = f"Pedido {pedido_atual['id']} finalizado! Total R$ {total:.2f}. Pagamento aprovado ✅. Já já sai quentinho!"
+    else:
+        
+        resposta = "Posso te mostrar o cardápio, adicionar itens ao carrinho, remover, listar ou finalizar. Como te ajudo?"
 
-    return {"mensagem": "Carrinho finalizado e pagamento aprovado", "pagamento_id": pagamento_id}
+    resposta = nordestinizar(resposta)
+    if from_number:
+        send_whatsapp(from_number, resposta)
 
-# ------------------------------
-# IA
-# ------------------------------
-@app.get("/ia/pergunta")
-def perguntar_ia(pergunta: str):
-    resposta = gerar_resposta(pergunta)
-    return {"resposta": nordestinizar(resposta)}
+    return "OK"
 
-# ------------------------------
-# TWILIO
-# ------------------------------
-@app.post("/enviar_mensagem")
-def enviar_msg(destino: str, mensagem: str):
-    return enviar_mensagem(destino, mensagem)
+
+def saudacao(nome: str):
+    return f"Bem-vindo ao Brasas, {nome}! Quer ver nosso cardápio?"
+
+def montar_cardapio_texto():
+    itens = db.listar_cardapio_ativo()
+    if not itens:
+        return "Vixe, o cardápio tá vazio por enquanto."
+    linhas = []
+    for it in itens:
+        preco = float(it['preco_centavos'])/100 if it['preco_centavos'] is not None else 0.0
+        desc = f" — {it['descricao']}" if it.get('descricao') else ""
+        linhas.append(f"- {it['nome']} — R$ {preco:.2f}{desc}")
+    return "Cardápio de hoje:\n" + "\n".join(linhas) + "\n\nPeça assim: 'quero 2 x-burgers e 1 coca'."
+
+def montar_carrinho_texto(carrinho_id):
+    itens = db.listar_itens_carrinho(carrinho_id)
+    if not itens:
+        return "Teu carrinho tá vazio, cabra. Quer ver o cardápio?"
+    linhas = [f"{i['quantidade']}x {i['nome']} = R$ {float(i['subtotal'])/100:.2f}" for i in itens]
+    total = db.total_carrinho_centavos(carrinho_id)/100
+    return "Teu carrinho:\n" + "\n".join(linhas) + f"\nTotal: R$ {total:.2f}\nDiz 'finalizar' pra fechar o pedido."

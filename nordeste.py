@@ -1,3 +1,5 @@
 def nordestinizar(texto: str) -> str:
-    """Deixa o texto com um tom nordestino simpático"""
-    return f"Oxente! {texto} 😊"
+    prefixo = "Oxente! "
+    if texto.strip().lower().startswith("oxente"):
+        return texto
+    return f"{prefixo}{texto} 😊"
