@@ -41,10 +41,13 @@ async def twilio_webhook(request: Request):
 
     if intent["acao"] == "saudacao":
         resposta = saudacao(cliente.get("nome") or "cliente")
+
     elif intent["acao"] == "cardapio":
         resposta = montar_cardapio_texto()
+
     elif intent["acao"] == "listar_carrinho":
         resposta = montar_carrinho_texto(carrinho["id"])
+
     elif intent["acao"] == "adicionar":
         adicionados = []
         for item in intent.get("itens", []):
@@ -57,6 +60,7 @@ async def twilio_webhook(request: Request):
             resposta = f"Botei no carrinho: {', '.join(adicionados)}. Quer ver o carrinho ou finalizar?"
         else:
             resposta = "Num achei esses itens no cardápio não, visse? Diz de novo o nome certinho."
+
     elif intent["acao"] == "remover":
         removidos = []
         for item in intent.get("itens", []):
@@ -65,20 +69,29 @@ async def twilio_webhook(request: Request):
                 db.remove_item(carrinho["id"], prod["id"])
                 removidos.append(prod["nome"])
         if removidos:
-            resposta = f"Tirei do carrinho: {', '.join(removidos)}. Quer mais alguma coisa?"
+            itens_restantes = db.listar_itens_carrinho(carrinho["id"])
+            if itens_restantes:
+                linhas = [f"{i['quantidade']}x {i['nome']}" for i in itens_restantes]
+                resposta = (
+                    f"Tirei do carrinho: {', '.join(removidos)}. "
+                    f"Ainda ficou com: {', '.join(linhas)}."
+                )
+            else:
+                resposta = f"Tirei do carrinho: {', '.join(removidos)}. Agora teu carrinho tá vazio."
         else:
             resposta = "Num encontrei esses itens no carrinho, meu rei."
+
     elif intent["acao"] == "finalizar":
         pedido = db.finalizar_carrinho_e_criar_pedido(cliente["id"], carrinho["id"])
         pagamento, pedido_atual = db.criar_pagamento_ficticio(carrinho["id"], "pix")
         total = db.total_carrinho_centavos(carrinho["id"]) / 100
         resposta = f"Pedido {pedido_atual['id']} finalizado! Total R$ {total:.2f}. Pagamento aprovado ✅. Já já sai quentinho!"
+
     else:
         resposta = "Posso te mostrar o cardápio, adicionar itens ao carrinho, remover, listar ou finalizar. Como te ajudo?"
 
     resposta = nordestinizar(resposta)
 
-   
     if from_number:
         to_whatsapp = f"whatsapp:{telefone}"
         send_whatsapp(to_whatsapp, resposta)
