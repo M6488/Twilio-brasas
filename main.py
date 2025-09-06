@@ -108,15 +108,17 @@ def montar_cardapio_texto():
         return "Vixe, o cardápio tá vazio por enquanto."
     linhas = []
     for it in itens:
-        preco = float(it['preco_real'])/100 if it['preco_real'] is not None else 0.0
+        preco = float(it['preco_real']) if it['preco_real'] is not None else 0.0
         desc = f" — {it['descricao']}" if it.get('descricao') else ""
         linhas.append(f"- {it['nome']} — R$ {preco:.2f}{desc}")
     return "Cardápio de hoje:\n" + "\n".join(linhas) + "\n\nPeça assim: 'quero 2 x-burgers e 1 coca'."
+
 
 def montar_carrinho_texto(carrinho_id):
     itens = db.listar_itens_carrinho(carrinho_id)
     if not itens:
         return "Teu carrinho tá vazio, cabra. Quer ver o cardápio?"
-    linhas = [f"{i['quantidade']}x {i['nome']} = R$ {float(i['subtotal'])/100:.2f}" for i in itens]
-    total = db.total_carrinho_centavos(carrinho_id)/100
+
+    linhas = [f"{i['quantidade']}x {i['nome']} = R$ {float(i['subtotal']):.2f}" for i in itens]
+    total = db.total_carrinho_reais(carrinho_id)
     return "Teu carrinho:\n" + "\n".join(linhas) + f"\nTotal: R$ {total:.2f}\nDiz 'finalizar' pra fechar o pedido."
