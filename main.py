@@ -112,7 +112,6 @@ def montar_cardapio_texto():
         linhas.append(f"- {it['nome']} — R$ {preco:.2f}{desc}")
     return "Cardápio de hoje:\n" + "\n".join(linhas) + "\n\nPeça assim: 'quero 2 x-burgers e 1 coca'."
 
-
 def montar_carrinho_texto(carrinho_id):
     itens = db.listar_itens_carrinho(carrinho_id)
     if not itens:
