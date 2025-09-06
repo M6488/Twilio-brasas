@@ -36,10 +36,10 @@ def get_or_create_cliente_por_telefone(telefone: str, nome: Optional[str]=None, 
 
 
 def listar_cardapio_ativo():
-    return fetch_all("SELECT id, nome, preco_centavos, descricao FROM cardapio WHERE ativo = TRUE ORDER BY nome")
+    return fetch_all("SELECT id, nome, preco_real, descricao FROM cardapio WHERE ativo = TRUE ORDER BY nome")
 
 def buscar_produto_por_nome(nome: str):
-    return fetch_one("SELECT id, nome, preco_centavos FROM cardapio WHERE ativo = TRUE AND LOWER(nome) LIKE %s LIMIT 1",
+    return fetch_one("SELECT id, nome, preco_real FROM cardapio WHERE ativo = TRUE AND LOWER(nome) LIKE %s LIMIT 1",
                      (f"%{nome.lower()}%",))
 
 
@@ -63,7 +63,7 @@ def remove_item(carrinho_id, produto_id):
 
 def listar_itens_carrinho(carrinho_id):
     return fetch_all(
-        """SELECT ic.produto_id, c.nome, c.preco_centavos, ic.quantidade, (c.preco_centavos * ic.quantidade) AS subtotal
+        """SELECT ic.produto_id, c.nome, c.preco_real, ic.quantidade, (c.preco_real * ic.quantidade) AS subtotal
             FROM itens_carrinho ic
             JOIN cardapio c ON c.id = ic.produto_id
             WHERE ic.carrinho_id = %s
@@ -71,7 +71,7 @@ def listar_itens_carrinho(carrinho_id):
     )
 
 def total_carrinho_centavos(carrinho_id) -> int:
-    res = fetch_one("""SELECT COALESCE(SUM(c.preco_centavos * ic.quantidade),0) AS total
+    res = fetch_one("""SELECT COALESCE(SUM(c.preco_real * ic.quantidade),0) AS total
                          FROM itens_carrinho ic
                          JOIN cardapio c ON c.id = ic.produto_id
                          WHERE ic.carrinho_id=%s""", (carrinho_id,))

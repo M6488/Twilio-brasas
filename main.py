@@ -108,7 +108,7 @@ def montar_cardapio_texto():
         return "Vixe, o cardápio tá vazio por enquanto."
     linhas = []
     for it in itens:
-        preco = float(it['preco_centavos'])/100 if it['preco_centavos'] is not None else 0.0
+        preco = float(it['preco_real'])/100 if it['preco_real'] is not None else 0.0
         desc = f" — {it['descricao']}" if it.get('descricao') else ""
         linhas.append(f"- {it['nome']} — R$ {preco:.2f}{desc}")
     return "Cardápio de hoje:\n" + "\n".join(linhas) + "\n\nPeça assim: 'quero 2 x-burgers e 1 coca'."
