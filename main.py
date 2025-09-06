@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse
-from typing import Optional, Dict, Any
 from config import TWILIO_WHATSAPP_FROM
 from twilio_client import send_whatsapp
 import db
@@ -22,7 +21,7 @@ def http_carrinho(telefone: str):
     cli = db.get_or_create_cliente_por_telefone(telefone)
     carr = db.get_or_create_carrinho_aberto(cli["id"])
     itens = db.listar_itens_carrinho(carr["id"])
-    total = db.total_carrinho_centavos(carr["id"]) / 100
+    total = db.total_carrinho_reais(carr["id"])
     return {"carrinho_id": carr["id"], "itens": itens, "total": total}
 
 @app.post("/twilio/webhook", response_class=PlainTextResponse)
@@ -84,7 +83,7 @@ async def twilio_webhook(request: Request):
     elif intent["acao"] == "finalizar":
         pedido = db.finalizar_carrinho_e_criar_pedido(cliente["id"], carrinho["id"])
         pagamento, pedido_atual = db.criar_pagamento_ficticio(carrinho["id"], "pix")
-        total = db.total_carrinho_centavos(carrinho["id"]) / 100
+        total = db.total_carrinho_reais(carrinho["id"])
         resposta = f"Pedido {pedido_atual['id']} finalizado! Total R$ {total:.2f}. Pagamento aprovado ✅. Já já sai quentinho!"
 
     else:
