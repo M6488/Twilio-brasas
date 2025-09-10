@@ -105,12 +105,30 @@ def montar_cardapio_texto():
     itens = db.listar_cardapio_ativo()
     if not itens:
         return "Vixe, o cardápio tá vazio por enquanto."
-    linhas = []
+
+    categorias = {}
     for it in itens:
+        cat = it.get('categoria', 'Outros')
+        if cat not in categorias:
+            categorias[cat] = []
         preco = float(it['preco_real']) if it['preco_real'] is not None else 0.0
-        desc = f" — {it['descricao']}" if it.get('descricao') else ""
-        linhas.append(f"- {it['nome']} — R$ {preco:.2f}{desc}")
-    return "Cardápio de hoje:\n" + "\n".join(linhas) + "\n\nPeça assim: 'quero 2 x-burgers e 1 coca'."
+        desc = f"\n   {it['descricao']}" if it.get('descricao') else ""
+        categorias[cat].append(f"{it['nome']} — R$ {preco:.2f}{desc}")
+
+    linhas = ["📋 *Cardápio de Hoje*"]
+    emoji_cat = {
+        "Lanches": "🍔",
+        "Bebidas": "🥤",
+        "Acompanhamentos": "🍟",
+        "Sobremesas": "🍰"
+    }
+    for cat, lista in categorias.items():
+        linhas.append(f"\n{emoji_cat.get(cat, '🍽️')} *{cat}*")
+        for i, item in enumerate(lista, start=1):
+            linhas.append(f"{i}. {item}")
+
+    linhas.append("\n👉 Peça assim: 'quero 2 x-burgers e 1 coca'")
+    return "\n".join(linhas)
 
 def montar_carrinho_texto(carrinho_id):
     itens = db.listar_itens_carrinho(carrinho_id)
@@ -119,4 +137,4 @@ def montar_carrinho_texto(carrinho_id):
 
     linhas = [f"{i['quantidade']}x {i['nome']} = R$ {float(i['subtotal']):.2f}" for i in itens]
     total = db.total_carrinho_reais(carrinho_id)
-    return "Teu carrinho:\n" + "\n".join(linhas) + f"\nTotal: R$ {total:.2f}\nDiz 'finalizar' pra fechar o pedido."
+    return "Teu carrinho:\n" + "\n".join(linhas) + f"\nTotal: R$ {total:.2f}\nDiga 'finalizar' pra fechar o pedido."
