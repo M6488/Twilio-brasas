@@ -8,6 +8,8 @@ from groq_client import nlu_intencao
 
 app = FastAPI(title="Chatbot Restaurante")
 
+MAX_WHATSAPP_LENGTH = 1600
+
 @app.get("/health")
 def health():
     return {"ok": True}
@@ -42,7 +44,10 @@ async def twilio_webhook(request: Request):
         resposta = saudacao(cliente.get("nome") or "cliente")
 
     elif intent["acao"] == "cardapio":
-        resposta = montar_cardapio_texto()
+        respostas = montar_cardapio_mensagens()
+        for msg in respostas:
+            send_whatsapp(f"whatsapp:{telefone}", nordestinizar(msg))
+        return "" 
 
     elif intent["acao"] == "listar_carrinho":
         resposta = montar_carrinho_texto(carrinho["id"])
@@ -89,11 +94,8 @@ async def twilio_webhook(request: Request):
     else:
         resposta = "Posso te mostrar o cardápio, adicionar itens ao carrinho, remover, listar ou finalizar. Como te ajudo?"
 
-    resposta = nordestinizar(resposta)
-
     if from_number:
-        to_whatsapp = f"whatsapp:{telefone}"
-        send_whatsapp(to_whatsapp, resposta)
+        send_whatsapp(f"whatsapp:{telefone}", nordestinizar(resposta))
 
     return
 
@@ -101,34 +103,68 @@ async def twilio_webhook(request: Request):
 def saudacao(nome: str):
     return f"Bem-vindo ao Brasas, {nome}! Quer ver nosso cardápio?"
 
-def montar_cardapio_texto():
+
+def montar_cardapio_mensagens():
     itens = db.listar_cardapio_ativo()
     if not itens:
-        return "Vixe, o cardápio tá vazio por enquanto."
+        return ["Vixe, o cardápio tá vazio por enquanto."]
 
     categorias = {}
+    categorias_alcoolicas = {
+        "Cervejas", "Vinhos", "Vodkas", "Cachaças", "Uísques", "Aperitivos", "Gins"
+    }
+
     for it in itens:
         cat = it.get('categoria', 'Outros')
+        if cat in categorias_alcoolicas:
+            cat = "Alcoólicas"
         if cat not in categorias:
             categorias[cat] = []
         preco = float(it['preco_real']) if it['preco_real'] is not None else 0.0
         desc = f"\n   {it['descricao']}" if it.get('descricao') else ""
         categorias[cat].append(f"{it['nome']} — R$ {preco:.2f}{desc}")
 
-    linhas = ["📋 *Cardápio de Hoje*"]
     emoji_cat = {
-        "Lanches": "🍔",
-        "Bebidas": "🥤",
-        "Acompanhamentos": "🍟",
-        "Sobremesas": "🍰"
+        "Sandubas": "🥪",
+        "Na Parrilla": "🥩",
+        "Buteco": "🍢",
+        "Cortes": "🍖",
+        "Cortes Nobres": "🥩",
+        "Bebidas Não Alcoólicas": "🥤",
+        "Alcoólicas": "🍷",
+        "Sobremesas": "🍰",
+        "Outros": "🍽️"
     }
-    for cat, lista in categorias.items():
-        linhas.append(f"\n{emoji_cat.get(cat, '🍽️')} *{cat}*")
-        for i, item in enumerate(lista, start=1):
-            linhas.append(f"{i}. {item}")
 
-    linhas.append("\n👉 Peça assim: 'quero 2 x-burgers e 1 coca'")
-    return "\n".join(linhas)
+    ordem_categorias = [
+        "Sandubas", "Na Parrilla", "Buteco", "Cortes", "Cortes Nobres",
+        "Bebidas Não Alcoólicas", "Alcoólicas", "Sobremesas", "Outros"
+    ]
+
+    mensagens = ["📋 *Cardápio de Hoje*"]
+
+    output = []
+    for cat in ordem_categorias:
+        if cat in categorias:
+            linhas_cat = [f"{emoji_cat.get(cat, '🍽️')} *{cat}*"]
+            for i, item in enumerate(categorias[cat], start=1):
+                linhas_cat.append(f"{i}. {item}")
+            texto_cat = "\n".join(linhas_cat)
+
+    
+            while len(texto_cat) > MAX_WHATSAPP_LENGTH:
+                corte = texto_cat.rfind("\n", 0, MAX_WHATSAPP_LENGTH)
+                if corte == -1:
+                    corte = MAX_WHATSAPP_LENGTH
+                output.append(texto_cat[:corte])
+                texto_cat = texto_cat[corte:].lstrip("\n")
+            if texto_cat:
+                output.append(texto_cat)
+    if output:
+        output[-1] += "\n\n👉 Peça assim: 'quero 2 x-burgers e 1 coca'"
+
+    return output
+
 
 def montar_carrinho_texto(carrinho_id):
     itens = db.listar_itens_carrinho(carrinho_id)
