@@ -10,13 +10,16 @@ app = FastAPI(title="Chatbot Restaurante")
 
 MAX_WHATSAPP_LENGTH = 1600
 
+
 @app.get("/health")
 def health():
     return {"ok": True}
 
+
 @app.get("/cardapio")
 def http_cardapio():
     return db.listar_cardapio_ativo()
+
 
 @app.get("/carrinho/{telefone}")
 def http_carrinho(telefone: str):
@@ -26,11 +29,12 @@ def http_carrinho(telefone: str):
     total = db.total_carrinho_reais(carr["id"])
     return {"carrinho_id": carr["id"], "itens": itens, "total": total}
 
+
 @app.post("/twilio/webhook", response_class=PlainTextResponse)
 async def twilio_webhook(request: Request):
     form = await request.form()
     
-    from_number = form.get("From")      
+    from_number = form.get("From")
     body = (form.get("Body") or "").strip()
     profile_name = form.get("ProfileName") or None
 
@@ -47,15 +51,14 @@ async def twilio_webhook(request: Request):
         respostas = montar_cardapio_mensagens()
         for msg in respostas:
             send_whatsapp(f"whatsapp:{telefone}", nordestinizar(msg))
-        return "" 
-
+        return ""  
     elif intent["acao"] == "listar_carrinho":
         resposta = montar_carrinho_texto(carrinho["id"])
 
     elif intent["acao"] == "adicionar":
         adicionados = []
         for item in intent.get("itens", []):
-            prod = db.buscar_produto_por_nome(item.get("nome",""))
+            prod = db.buscar_produto_por_nome(item.get("nome", ""))
             if prod:
                 qtd = max(1, int(item.get("quantidade") or 1))
                 db.add_item(carrinho["id"], prod["id"], qtd)
@@ -68,7 +71,7 @@ async def twilio_webhook(request: Request):
     elif intent["acao"] == "remover":
         removidos = []
         for item in intent.get("itens", []):
-            prod = db.buscar_produto_por_nome(item.get("nome",""))
+            prod = db.buscar_produto_por_nome(item.get("nome", ""))
             if prod:
                 db.remove_item(carrinho["id"], prod["id"])
                 removidos.append(prod["nome"])
@@ -94,11 +97,13 @@ async def twilio_webhook(request: Request):
     else:
         resposta = "Posso te mostrar o cardápio, adicionar itens ao carrinho, remover, listar ou finalizar. Como te ajudo?"
 
-    if from_number:
+    if from_number and resposta:
         send_whatsapp(f"whatsapp:{telefone}", nordestinizar(resposta))
 
-    return
+    return ""
 
+
+# ----------- Funções auxiliares -----------
 
 def saudacao(nome: str):
     return f"Bem-vindo ao Brasas, {nome}! Quer ver nosso cardápio?"
@@ -142,8 +147,8 @@ def montar_cardapio_mensagens():
     ]
 
     mensagens = ["📋 *Cardápio de Hoje*"]
-
     output = []
+
     for cat in ordem_categorias:
         if cat in categorias:
             linhas_cat = [f"{emoji_cat.get(cat, '🍽️')} *{cat}*"]
@@ -151,7 +156,7 @@ def montar_cardapio_mensagens():
                 linhas_cat.append(f"{i}. {item}")
             texto_cat = "\n".join(linhas_cat)
 
-    
+            # Quebra automática de partes grandes
             while len(texto_cat) > MAX_WHATSAPP_LENGTH:
                 corte = texto_cat.rfind("\n", 0, MAX_WHATSAPP_LENGTH)
                 if corte == -1:
@@ -160,6 +165,7 @@ def montar_cardapio_mensagens():
                 texto_cat = texto_cat[corte:].lstrip("\n")
             if texto_cat:
                 output.append(texto_cat)
+
     if output:
         output[-1] += "\n\n👉 Peça assim: 'quero 2 x-burgers e 1 coca'"
 
